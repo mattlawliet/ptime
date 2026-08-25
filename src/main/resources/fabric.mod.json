@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "ptime",
+  "version": "${version}",
+  "name": "ptime",
+  "description": "Track player timezones from your client — now for Minecraft 26.1.2.",
+  "authors": [
+    "Matt"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.matt.ptime.PtimeClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": ">=26.1.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

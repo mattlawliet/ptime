@@ -1,0 +1,46 @@
+# Build output
+.gradle/
+.gradle-home/
+.gradle-project-cache/
+.gradle-tmp/
+build/
+bin/
+out/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local dev runtime — worlds, logs, usercache, options
+run/
+logs/
+*.log
+tmp/
+releases/
+
+# IDE / editor
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+.antigravitycli/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Extracted Minecraft/Fabric jar dumped into the project root.
+# Mojang-owned assets, ~155 MB, and nothing here is ours. Leading slashes
+# keep src/main/resources/data/ptime/ safe.
+/net/
+/com/
+/assets/
+/data/
+/META-INF/
+/version.json
+/pack.png
+/flightrecorder-config.jfc
+/fabric.mod.json
+/LICENSE-fabric-api
