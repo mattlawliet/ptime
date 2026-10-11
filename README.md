@@ -7,7 +7,7 @@ Lock your visual time locally — permanent noon for building, permanent night i
 prefer it — while the server and everyone on it stay unaffected.
 
 - **Loader:** Fabric (client-side only)
-- **Minecraft:** 26.1.2
+- **Minecraft:** 26.2
 
 ## Timezones
 

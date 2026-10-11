@@ -38,7 +38,7 @@ public final class PtimeClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openKey.consumeClick()) {
-                client.setScreen(new PtimeScreen(manager));
+                client.gui.setScreen(new PtimeScreen(manager));
             }
         });
 
@@ -152,7 +152,7 @@ public final class PtimeClient implements ClientModInitializer {
     private void openScreen() {
         Minecraft client = Minecraft.getInstance();
         if (client != null) {
-            client.setScreen(new PtimeScreen(manager));
+            client.gui.setScreen(new PtimeScreen(manager));
         }
     }
 
