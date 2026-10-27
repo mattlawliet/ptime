@@ -600,6 +600,9 @@ public final class PtimeManager {
 
         if (trimmed.matches("[+-]\\d{1,2}")) {
             int hours = Integer.parseInt(trimmed);
+            if (hours < -12 || hours > 14) {
+                throw new ZoneRulesException("UTC offsets run from -12 to +14");
+            }
             return ZoneOffset.ofHours(hours);
         }
 

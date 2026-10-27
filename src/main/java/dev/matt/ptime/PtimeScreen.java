@@ -12,6 +12,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.DefaultPlayerSkin;
@@ -19,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.PlayerSkin;
+import org.lwjgl.glfw.GLFW;
 
 public final class PtimeScreen extends Screen {
     private static final int BACKGROUND = 0xD0141722;
@@ -29,8 +31,6 @@ public final class PtimeScreen extends Screen {
     private static final int PLAYER_TIME = 0xFFFDE68A;
     private static final int LOCAL_TIME = 0xFF93C5FD;
     private static final int TITLE = 0xFFB8F2DE;
-    private static final int FAVORITE = 0xFFFDE68A;
-    private static final int UNFAVORITE = 0xFFCBD5E1;
     private static final int LIST_LEFT = 18;
     private static final int LIST_RIGHT_MARGIN = 18;
     private static final int LIST_TOP = 84;
@@ -43,6 +43,12 @@ public final class PtimeScreen extends Screen {
     private static final int COMPACT_CARD_MIN_WIDTH = 200;
     private static final int COMPACT_CARD_MAX_WIDTH = 260;
     private static final int FACE_SIZE = 32;
+    private static final int HEART_SIZE = 9;
+    private static final int SCROLLBAR_WIDTH = 6;
+    private static final Identifier HEART_FULL = Identifier.withDefaultNamespace("hud/heart/full");
+    private static final Identifier HEART_EMPTY = Identifier.withDefaultNamespace("hud/heart/container");
+    private static final Identifier SCROLLER = Identifier.withDefaultNamespace("widget/scroller");
+    private static final Identifier SCROLLER_BACKGROUND = Identifier.withDefaultNamespace("widget/scroller_background");
     private static LayoutMode rememberedLayoutMode = LayoutMode.REGULAR;
 
     private final PtimeManager manager;
@@ -64,10 +70,11 @@ public final class PtimeScreen extends Screen {
         searchField = new EditBox(font, LIST_LEFT, 32, searchWidth, 20, Component.literal("Search players"));
         searchField.setMaxLength(64);
         searchField.setValue(searchQuery);
+        searchField.setHint(Component.literal("Search players").setStyle(EditBox.SEARCH_HINT_STYLE));
         addRenderableWidget(searchField);
         setInitialFocus(searchField);
 
-        int layoutWidth = 96;
+        int layoutWidth = 110;
         int closeWidth = 80;
         int layoutX = width - LIST_RIGHT_MARGIN - closeWidth - 8 - layoutWidth;
         int closeX = width - LIST_RIGHT_MARGIN - closeWidth;
@@ -88,14 +95,11 @@ public final class PtimeScreen extends Screen {
         extractor.fill(0, 0, width, height, BACKGROUND);
 
         extractor.text(font, titleText(), LIST_LEFT, 12, TITLE, true);
-        extractor.text(
-            font,
-            Component.literal("Search names, scroll for more cards, and click the star to favorite one."),
-            LIST_LEFT,
-            58,
-            SUBTEXT,
-            true
-        );
+        ZonedDateTime clientTime = ZonedDateTime.now(manager.selfZoneId());
+        int headerX = LIST_LEFT;
+        headerX = drawText(extractor, "Your time ", headerX, 58, SUBTEXT);
+        headerX = drawText(extractor, formatClock(clientTime), headerX, 58, LOCAL_TIME);
+        drawText(extractor, "  " + PtimeManager.formatOffset(clientTime), headerX, 58, SUBTEXT);
 
         if (searchField != null && !searchQuery.equals(searchField.getValue())) {
             searchQuery = searchField.getValue();
@@ -131,14 +135,15 @@ public final class PtimeScreen extends Screen {
             y = drawEmptyState(extractor, y, viewportBottom);
         } else {
             if (!favorites.isEmpty()) {
-                y = drawSection(extractor, "Favorites", favorites, y, metrics, mouseX, mouseY);
+                y = drawSection(extractor, "Favorites", favorites, y, metrics, clientTime, mouseX, mouseY);
             }
             if (!others.isEmpty()) {
-                y = drawSection(extractor, favorites.isEmpty() ? null : "All players", others, y, metrics, mouseX, mouseY);
+                y = drawSection(extractor, favorites.isEmpty() ? null : "All players", others, y, metrics, clientTime, mouseX, mouseY);
             }
         }
 
         extractor.disableScissor();
+        drawScrollbar(extractor, viewportTop, viewportBottom, contentHeight);
         super.extractRenderState(extractor, mouseX, mouseY, deltaTicks);
     }
 
@@ -176,6 +181,22 @@ public final class PtimeScreen extends Screen {
     }
 
     @Override
+    public boolean keyPressed(KeyEvent event) {
+        int step = switch (event.key()) {
+            case GLFW.GLFW_KEY_UP -> -SCROLL_STEP;
+            case GLFW.GLFW_KEY_DOWN -> SCROLL_STEP;
+            case GLFW.GLFW_KEY_PAGE_UP -> -(height - LIST_TOP - LIST_BOTTOM_MARGIN);
+            case GLFW.GLFW_KEY_PAGE_DOWN -> height - LIST_TOP - LIST_BOTTOM_MARGIN;
+            default -> 0;
+        };
+        if (step != 0 && maxScrollOffset > 0) {
+            scrollOffset = clamp(scrollOffset + step, 0, maxScrollOffset);
+            return true;
+        }
+        return super.keyPressed(event);
+    }
+
+    @Override
     public boolean isPauseScreen() {
         return false;
     }
@@ -204,6 +225,7 @@ public final class PtimeScreen extends Screen {
         List<PtimeManager.TrackedPlayer> players,
         int y,
         LayoutMetrics metrics,
+        ZonedDateTime clientTime,
         int mouseX,
         int mouseY
     ) {
@@ -212,7 +234,6 @@ public final class PtimeScreen extends Screen {
         }
 
         int rows = (players.size() + metrics.columns - 1) / metrics.columns;
-        ZonedDateTime clientTime = ZonedDateTime.now(manager.selfZoneId());
         for (int index = 0; index < players.size(); index++) {
             int column = index % metrics.columns;
             int row = index / metrics.columns;
@@ -250,12 +271,9 @@ public final class PtimeScreen extends Screen {
         int mouseY
     ) {
         ZonedDateTime playerTime = ZonedDateTime.now(player.zoneId());
-        boolean sameTimezone = player.zoneId().equals(manager.selfZoneId());
         boolean favorite = manager.isFavorite(player.name());
         boolean regular = layoutMode == LayoutMode.REGULAR;
-        
         int textX = x + 56;
-        int rightX = x + width - 22;
 
         extractor.fill(x, y, x + width, y + height, CARD);
         extractor.fill(x, y, x + width, y + 2, CARD_ACCENT);
@@ -264,45 +282,28 @@ public final class PtimeScreen extends Screen {
         drawSkin(extractor, player, x + 12, y + 6);
 
         extractor.text(font, Component.literal(player.name()), textX, y + 8, TEXT, true);
-        extractor.text(
-            font,
-            Component.literal(PtimeManager.timezoneLabel(player.timezoneId()) + "  " + PtimeManager.formatOffset(playerTime)),
-            textX,
-            y + (regular ? 24 : 22),
-            SUBTEXT,
-            true
-        );
-
-        String playerClock = PtimeManager.formatTime(playerTime);
-        extractor.text(font, Component.literal(playerClock), textX, y + (regular ? 42 : 38), PLAYER_TIME, true);
-
-        if (sameTimezone) {
-            extractor.text(font, Component.literal("Same timezone"), textX, y + (regular ? 58 : 52), SUBTEXT, true);
-        } else {
-            String yourClock = PtimeManager.formatTime(clientTime);
-            extractor.text(
-                font,
-                Component.literal(yourClock),
-                rightX - font.width(yourClock),
-                y + (regular ? 42 : 38),
-                LOCAL_TIME,
-                true
-            );
-            extractor.text(font, Component.literal(PtimeManager.formatOffset(playerTime)), textX, y + (regular ? 58 : 52), SUBTEXT, true);
+        if (regular) {
+            extractor.text(font, Component.literal(zoneLine(player.timezoneId(), playerTime)), textX, y + 22, SUBTEXT, true);
         }
 
-        drawFavoriteToggle(extractor, favorite, x + width - 16, y + 4, mouseX, mouseY);
-        cardHitboxes.add(new CardHitbox(player.name(), x + width - 18, y + 2, 14, 14));
+        int clockY = y + (regular ? 38 : 24);
+        int afterClock = drawText(extractor, formatClock(playerTime), textX, clockY, PLAYER_TIME);
+        drawText(extractor, "  " + relativeTo(playerTime, clientTime), afterClock, clockY, SUBTEXT);
+
+        int heartX = x + width - 8 - HEART_SIZE;
+        int heartY = y + 8;
+        drawFavoriteToggle(extractor, favorite, heartX, heartY, mouseX, mouseY);
+        // ponytail: 5px of slack around the 9px heart so it is an easy click target
+        cardHitboxes.add(new CardHitbox(player.name(), heartX - 5, heartY - 5, HEART_SIZE + 10, HEART_SIZE + 10));
     }
 
     private void drawFavoriteToggle(GuiGraphicsExtractor extractor, boolean favorite, int x, int y, int mouseX, int mouseY) {
-        boolean hovered = mouseX >= x - 2 && mouseX <= x + 12 && mouseY >= y - 2 && mouseY <= y + 12;
-        int color = favorite ? FAVORITE : UNFAVORITE;
+        boolean hovered = mouseX >= x - 5 && mouseX <= x + HEART_SIZE + 5 && mouseY >= y - 5 && mouseY <= y + HEART_SIZE + 5;
+        Identifier sprite = favorite || hovered ? HEART_FULL : HEART_EMPTY;
+        extractor.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x, y, HEART_SIZE, HEART_SIZE);
         if (hovered) {
-            color = favorite ? 0xFFFFF3A3 : 0xFFFFFFFF;
+            extractor.setTooltipForNextFrame(font, Component.literal(favorite ? "Remove from favorites" : "Add to favorites"), mouseX, mouseY);
         }
-
-        extractor.centeredText(font, Component.literal(favorite ? "\u2605" : "\u2606"), x + 5, y + 1, color);
     }
 
     private void drawSkin(GuiGraphicsExtractor extractor, PtimeManager.TrackedPlayer player, int x, int y) {
@@ -311,9 +312,8 @@ public final class PtimeScreen extends Screen {
         // Base layer
         extractor.blit(RenderPipelines.GUI_TEXTURED, texturePath, x, y, 8.0f, 8.0f, FACE_SIZE, FACE_SIZE, 8, 8, 64, 64, 0xFFFFFFFF);
         
-        // Top layer (hat) with a tad of inflation (1px)
-        int i = 1;
-        extractor.blit(RenderPipelines.GUI_TEXTURED, texturePath, x - i, y - i, 40.0f, 8.0f, FACE_SIZE + 2 * i, FACE_SIZE + 2 * i, 8, 8, 64, 64, 0xFFFFFFFF);
+        // Top layer (hat), same size as the face so both stay at a whole-number scale
+        extractor.blit(RenderPipelines.GUI_TEXTURED, texturePath, x, y, 40.0f, 8.0f, FACE_SIZE, FACE_SIZE, 8, 8, 64, 64, 0xFFFFFFFF);
     }
 
     private Identifier resolveSkinTexture(String playerName) {
@@ -362,10 +362,8 @@ public final class PtimeScreen extends Screen {
         int maxCardWidth = layoutMode == LayoutMode.REGULAR ? REGULAR_CARD_MAX_WIDTH : COMPACT_CARD_MAX_WIDTH;
         int columns = Math.max(1, (availableWidth + gap) / (minCardWidth + gap));
         int cardWidth = Math.min(maxCardWidth, Math.max(minCardWidth, (availableWidth - ((columns - 1) * gap)) / columns));
-        int gridWidth = columns * cardWidth + (columns - 1) * gap;
-        int left = LIST_LEFT + Math.max(0, (availableWidth - gridWidth) / 2);
-        int cardHeight = layoutMode == LayoutMode.REGULAR ? 72 : 64;
-        return new LayoutMetrics(left, columns, cardWidth, cardHeight, gap);
+        int cardHeight = layoutMode == LayoutMode.REGULAR ? 56 : 44;
+        return new LayoutMetrics(LIST_LEFT, columns, cardWidth, cardHeight, gap);
     }
 
     private Comparator<PtimeManager.TrackedPlayer> playerComparator(String query) {
@@ -408,6 +406,46 @@ public final class PtimeScreen extends Screen {
         return score + Math.max(0, normalizedName.length() - trimmed.length());
     }
 
+    private void drawScrollbar(GuiGraphicsExtractor extractor, int top, int bottom, int contentHeight) {
+        if (maxScrollOffset <= 0) {
+            return;
+        }
+        int x = width - LIST_RIGHT_MARGIN + 6;
+        int trackHeight = bottom - top;
+        int thumbHeight = clamp(trackHeight * trackHeight / contentHeight, 32, trackHeight);
+        int thumbY = top + scrollOffset * (trackHeight - thumbHeight) / maxScrollOffset;
+        extractor.blitSprite(RenderPipelines.GUI_TEXTURED, SCROLLER_BACKGROUND, x, top, SCROLLBAR_WIDTH, trackHeight);
+        extractor.blitSprite(RenderPipelines.GUI_TEXTURED, SCROLLER, x, thumbY, SCROLLBAR_WIDTH, thumbHeight);
+    }
+
+    private int drawText(GuiGraphicsExtractor extractor, String text, int x, int y, int color) {
+        extractor.text(font, Component.literal(text), x, y, color, true);
+        return x + font.width(text);
+    }
+
+    private static String formatClock(ZonedDateTime time) {
+        return "%02d:%02d".formatted(time.getHour(), time.getMinute());
+    }
+
+    // Place name once, then the offset; a bare offset zone is shown only as its offset.
+    private static String zoneLine(String timezoneId, ZonedDateTime time) {
+        String offset = PtimeManager.formatOffset(time);
+        String label = PtimeManager.timezoneLabel(timezoneId);
+        boolean bareOffset = label.isEmpty() || label.charAt(0) == '+' || label.charAt(0) == '-'
+            || label.startsWith("UTC") || label.startsWith("GMT") || label.equals("Z");
+        return bareOffset ? offset : label + "  " + offset;
+    }
+
+    static String relativeTo(ZonedDateTime theirs, ZonedDateTime yours) {
+        int diffMinutes = (theirs.getOffset().getTotalSeconds() - yours.getOffset().getTotalSeconds()) / 60;
+        if (diffMinutes == 0) {
+            return "same time as you";
+        }
+        int abs = Math.abs(diffMinutes);
+        String amount = abs % 60 == 0 ? (abs / 60) + "h" : (abs / 60) + "h " + (abs % 60) + "m";
+        return amount + (diffMinutes > 0 ? " ahead" : " behind");
+    }
+
     private int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(value, max));
     }
@@ -417,7 +455,7 @@ public final class PtimeScreen extends Screen {
     }
 
     private Component layoutButtonText() {
-        return Component.literal(layoutMode == LayoutMode.REGULAR ? "Compact" : "Regular");
+        return Component.literal(layoutMode == LayoutMode.REGULAR ? "Layout: Regular" : "Layout: Compact");
     }
 
     private enum LayoutMode {

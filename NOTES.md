@@ -17,7 +17,7 @@ Repo snapshot for future work on the Minecraft Fabric client mod `ptime`.
 - Supports vertical scrolling when the card list exceeds the viewport.
 - Supports fuzzy name search across tracked players.
 - Renders favorites in a section above the rest of the list when any are marked.
-- Lets you toggle favorites from a star on each card.
+- Lets you toggle favorites from a heart on each card (vanilla heart sprite, tooltip on hover).
 
 ## Key Files
 
